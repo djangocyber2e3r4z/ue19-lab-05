@@ -49,6 +49,7 @@ jobs:
           # Assurez-vous que le Dockerfile est à la racine. Sinon, changez le path.
           context: . 
           push: true
+          file: ./Dockerfile
           # ATTENTION : AUCUN COMMENTAIRE SOUS tags: |
           tags: |
             ${{ github.repository }}:latest
