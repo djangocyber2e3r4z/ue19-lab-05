@@ -26,7 +26,7 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
         
-      # --- 1. Connexion à Docker Hub (Utilise les Secrets) ---
+      # 1. Connexion à Docker Hub
       - name: Login to Docker Hub
         uses: docker/login-action@v3
         with:
@@ -34,7 +34,7 @@ jobs:
           password: ${{ secrets.DOCKER_PASSWORD }}
           logout: true 
           
-      # --- 2. Connexion à GitHub Container Registry (Utilise le GITHUB_TOKEN) ---
+      # 2. Connexion à GitHub Container Registry (GHCR)
       - name: Login to GitHub Container Registry
         uses: docker/login-action@v3
         with:
@@ -42,18 +42,38 @@ jobs:
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # --- 3. Build et Push de l'image Docker ---
-      - name: Build and push Docker image
+      # 3. Build de l'image (sans push immédiat)
+      # On utilise 'outputs' pour récupérer le nom de l'image construite
+      - name: Build Docker image
+        id: docker_build
         uses: docker/build-push-action@v5
         with:
-          # Assurez-vous que le Dockerfile est à la racine. Sinon, changez le path.
-          context: . 
+          context: .
+          # IMPORTANT : push: false pour pouvoir scanner avant de publier
+          push: false 
+          tags: ${{ github.repository }}:latest
+          # Si votre Dockerfile est nommé DockerFile, utilisez : file: ./DockerFile
+          
+      # 4. Scan de vulnérabilités avec Trivy <-- NOUVELLE ÉTAPE
+      - name: Scan with Trivy
+        uses: aquasecurity/trivy-action@master
+        with:
+          # Scanne l'image construite à partir de l'étape précédente
+          image-ref: ${{ github.repository }}:latest
+          format: 'table'
+          exit-code: '0' # Ne fait pas échouer l'action si des vulnérabilités sont trouvées (vous pouvez changer à '1' si vous voulez bloquer le pipeline)
+          severity: 'HIGH,CRITICAL' # Scanne seulement les vulnérabilités de gravité HIGH et CRITICAL
+          
+      # 5. Push de l'image (uniquement après le scan)
+      - name: Push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
           push: true
-          file: ./Dockerfile
-          # ATTENTION : AUCUN COMMENTAIRE SOUS tags: |
+          # Répéter les tags pour l'étape de push
           tags: |
             ${{ github.repository }}:latest
             ${{ github.repository }}:${{ github.sha }}
             ghcr.io/${{ github.repository }}:latest
             ghcr.io/${{ github.repository }}:${{ github.sha }}
-          # Si votre Dockerfile a un nom différent, utilisez: file: ./MonDockerfile
+          # Si votre Dockerfile est nommé DockerFile, utilisez : file: ./DockerFile
